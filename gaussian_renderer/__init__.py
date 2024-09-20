@@ -95,10 +95,11 @@ def generate_neural_gaussians(viewpoint_camera, pc : GaussianModel, visible_mask
     concatenated_repeated = repeat(concatenated, 'n (c) -> (n k) (c)', k=pc.n_offsets)
     concatenated_all = torch.cat([concatenated_repeated, color, scale_rot, offsets], dim=-1)
     masked = concatenated_all[mask]
+    ########################### Remember this ############################
     scaling_repeat, repeat_anchor, color, scale_rot, offsets = masked.split([6, 3, 3, 7, 3], dim=-1)
     
     # post-process cov
-    scaling = scaling_repeat[:,3:] * torch.sigmoid(scale_rot[:,:3]) # * (1+torch.sigmoid(repeat_dist))
+    scaling = scaling_repeat[:,3:] * torch.sigmoid(scale_rot[:,:3]) # * (1+torch.sigmoid(repeat_dist)) ####### so scaling_repeat is an offset as well ?
     rot = pc.rotation_activation(scale_rot[:,3:7])
     
     # post-process offsets to get centers for gaussians
