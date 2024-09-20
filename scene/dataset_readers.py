@@ -36,6 +36,7 @@ class CameraInfo(NamedTuple):
     uid: int
     R: np.array
     T: np.array
+    K: np.array
     FovY: np.array
     FovX: np.array
     image: np.array
@@ -83,13 +84,14 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
         sys.stdout.flush()
 
         extr = cam_extrinsics[key]
-        intr = cam_intrinsics[extr.camera_id]
+        intr = cam_intrinsics[extr.camera_id] # intr has shape (4,) as np.array
         height = intr.height
         width = intr.width
 
         uid = intr.id
         R = np.transpose(qvec2rotmat(extr.qvec))
         T = np.array(extr.tvec)
+        K = np.array(intr.params)
 
         # if intr.model=="SIMPLE_PINHOLE":
         if intr.model=="SIMPLE_PINHOLE" or intr.model == "SIMPLE_RADIAL":
@@ -112,7 +114,7 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
 
         # print(f'image: {image.size}')
 
-        cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
+        cam_info = CameraInfo(uid=uid, R=R, T=T, K=K, FovY=FovY, FovX=FovX, image=image,
                               image_path=image_path, image_name=image_name, width=width, height=height)
         cam_infos.append(cam_info)
     sys.stdout.write('\n')
@@ -181,7 +183,7 @@ def readColmapSceneInfo(path, images, eval, lod, llffhold=8):
         train_cam_infos = cam_infos
         test_cam_infos = []
 
-    nerf_normalization = getNerfppNorm(train_cam_infos)
+    nerf_normalization = getNerfppNorm(train_cam_infos) # {'translate': center of the scene, 'radius': diagonal of the scene}
 
     ply_path = os.path.join(path, "sparse/0/points3D.ply")
     bin_path = os.path.join(path, "sparse/0/points3D.bin")

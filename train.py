@@ -86,106 +86,106 @@ def training(dataset, opt, pipe, dataset_name, testing_iterations, saving_iterat
     gaussians = GaussianModel(dataset.feat_dim, dataset.n_offsets, dataset.voxel_size, dataset.update_depth, dataset.update_init_factor, dataset.update_hierachy_factor, dataset.use_feat_bank, 
                               dataset.appearance_dim, dataset.ratio, dataset.add_opacity_dist, dataset.add_cov_dist, dataset.add_color_dist)
     scene = Scene(dataset, gaussians, ply_path=ply_path, shuffle=False)
-    gaussians.training_setup(opt)
-    if checkpoint:
-        (model_params, first_iter) = torch.load(checkpoint)
-        gaussians.restore(model_params, opt)
+    # gaussians.training_setup(opt)
+    # if checkpoint:
+    #     (model_params, first_iter) = torch.load(checkpoint)
+    #     gaussians.restore(model_params, opt)
 
-    iter_start = torch.cuda.Event(enable_timing = True)
-    iter_end = torch.cuda.Event(enable_timing = True)
+    # iter_start = torch.cuda.Event(enable_timing = True)
+    # iter_end = torch.cuda.Event(enable_timing = True)
 
-    viewpoint_stack = None
-    ema_loss_for_log = 0.0
-    progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
-    first_iter += 1
-    for iteration in range(first_iter, opt.iterations + 1):        
-        # network gui not available in scaffold-gs yet
-        if network_gui.conn == None:
-            network_gui.try_connect()
-        while network_gui.conn != None:
-            try:
-                net_image_bytes = None
-                custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
-                if custom_cam != None:
-                    net_image = render(custom_cam, gaussians, pipe, background, scaling_modifer)["render"]
-                    net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
-                network_gui.send(net_image_bytes, dataset.source_path)
-                if do_training and ((iteration < int(opt.iterations)) or not keep_alive):
-                    break
-            except Exception as e:
-                network_gui.conn = None
+    # viewpoint_stack = None
+    # ema_loss_for_log = 0.0
+    # progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
+    # first_iter += 1
+    # for iteration in range(first_iter, opt.iterations + 1):        
+    #     # network gui not available in scaffold-gs yet
+    #     if network_gui.conn == None:
+    #         network_gui.try_connect()
+    #     while network_gui.conn != None:
+    #         try:
+    #             net_image_bytes = None
+    #             custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
+    #             if custom_cam != None:
+    #                 net_image = render(custom_cam, gaussians, pipe, background, scaling_modifer)["render"]
+    #                 net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
+    #             network_gui.send(net_image_bytes, dataset.source_path)
+    #             if do_training and ((iteration < int(opt.iterations)) or not keep_alive):
+    #                 break
+    #         except Exception as e:
+    #             network_gui.conn = None
 
-        iter_start.record()
+    #     iter_start.record()
 
-        gaussians.update_learning_rate(iteration)
+    #     gaussians.update_learning_rate(iteration)
 
-        bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
-        background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+    #     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
+    #     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
         
-        # Pick a random Camera
-        if not viewpoint_stack:
-            viewpoint_stack = scene.getTrainCameras().copy()
-        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+    #     # Pick a random Camera
+    #     if not viewpoint_stack:
+    #         viewpoint_stack = scene.getTrainCameras().copy()
+    #     viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
 
-        # Render
-        if (iteration - 1) == debug_from:
-            pipe.debug = True
+    #     # Render
+    #     if (iteration - 1) == debug_from:
+    #         pipe.debug = True
         
-        voxel_visible_mask = prefilter_voxel(viewpoint_cam, gaussians, pipe,background)
-        retain_grad = (iteration < opt.update_until and iteration >= 0)
-        render_pkg = render(viewpoint_cam, gaussians, pipe, background, visible_mask=voxel_visible_mask, retain_grad=retain_grad)
+    #     voxel_visible_mask = prefilter_voxel(viewpoint_cam, gaussians, pipe,background)
+    #     retain_grad = (iteration < opt.update_until and iteration >= 0)
+    #     render_pkg = render(viewpoint_cam, gaussians, pipe, background, visible_mask=voxel_visible_mask, retain_grad=retain_grad)
         
-        image, viewspace_point_tensor, visibility_filter, offset_selection_mask, radii, scaling, opacity = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["selection_mask"], render_pkg["radii"], render_pkg["scaling"], render_pkg["neural_opacity"]
+    #     image, viewspace_point_tensor, visibility_filter, offset_selection_mask, radii, scaling, opacity = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["selection_mask"], render_pkg["radii"], render_pkg["scaling"], render_pkg["neural_opacity"]
 
-        gt_image = viewpoint_cam.original_image.cuda()
-        Ll1 = l1_loss(image, gt_image)
+    #     gt_image = viewpoint_cam.original_image.cuda()
+    #     Ll1 = l1_loss(image, gt_image)
 
-        ssim_loss = (1.0 - ssim(image, gt_image))
-        scaling_reg = scaling.prod(dim=1).mean()
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * ssim_loss + 0.01*scaling_reg
+    #     ssim_loss = (1.0 - ssim(image, gt_image))
+    #     scaling_reg = scaling.prod(dim=1).mean()
+    #     loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * ssim_loss + 0.01*scaling_reg
 
-        loss.backward()
+    #     loss.backward()
         
-        iter_end.record()
+    #     iter_end.record()
 
-        with torch.no_grad():
-            # Progress bar
-            ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
+    #     with torch.no_grad():
+    #         # Progress bar
+    #         ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
 
-            if iteration % 10 == 0:
-                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
-                progress_bar.update(10)
-            if iteration == opt.iterations:
-                progress_bar.close()
+    #         if iteration % 10 == 0:
+    #             progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
+    #             progress_bar.update(10)
+    #         if iteration == opt.iterations:
+    #             progress_bar.close()
 
-            # Log and save
-            training_report(tb_writer, dataset_name, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), wandb, logger)
-            if (iteration in saving_iterations):
-                logger.info("\n[ITER {}] Saving Gaussians".format(iteration))
-                scene.save(iteration)
+    #         # Log and save
+    #         training_report(tb_writer, dataset_name, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background), wandb, logger)
+    #         if (iteration in saving_iterations):
+    #             logger.info("\n[ITER {}] Saving Gaussians".format(iteration))
+    #             scene.save(iteration)
             
-            # densification
-            if iteration < opt.update_until and iteration > opt.start_stat:
-                # add statis
-                gaussians.training_statis(viewspace_point_tensor, opacity, visibility_filter, offset_selection_mask, voxel_visible_mask)
+    #         # densification
+    #         if iteration < opt.update_until and iteration > opt.start_stat:
+    #             # add statis
+    #             gaussians.training_statis(viewspace_point_tensor, opacity, visibility_filter, offset_selection_mask, voxel_visible_mask)
                 
-                # densification
-                if iteration > opt.update_from and iteration % opt.update_interval == 0:
-                    gaussians.adjust_anchor(check_interval=opt.update_interval, success_threshold=opt.success_threshold, grad_threshold=opt.densify_grad_threshold, min_opacity=opt.min_opacity)
-            elif iteration == opt.update_until:
-                del gaussians.opacity_accum
-                del gaussians.offset_gradient_accum
-                del gaussians.offset_denom
-                torch.cuda.empty_cache()
+    #             # densification
+    #             if iteration > opt.update_from and iteration % opt.update_interval == 0:
+    #                 gaussians.adjust_anchor(check_interval=opt.update_interval, success_threshold=opt.success_threshold, grad_threshold=opt.densify_grad_threshold, min_opacity=opt.min_opacity)
+    #         elif iteration == opt.update_until:
+    #             del gaussians.opacity_accum
+    #             del gaussians.offset_gradient_accum
+    #             del gaussians.offset_denom
+    #             torch.cuda.empty_cache()
                     
-            # Optimizer step
-            if iteration < opt.iterations:
-                gaussians.optimizer.step()
-                gaussians.optimizer.zero_grad(set_to_none = True)
-            if (iteration in checkpoint_iterations):
-                logger.info("\n[ITER {}] Saving Checkpoint".format(iteration))
-                torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
+    #         # Optimizer step
+    #         if iteration < opt.iterations:
+    #             gaussians.optimizer.step()
+    #             gaussians.optimizer.zero_grad(set_to_none = True)
+    #         if (iteration in checkpoint_iterations):
+    #             logger.info("\n[ITER {}] Saving Checkpoint".format(iteration))
+    #             torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
 
 def prepare_output_and_logger(args):    
     if not args.model_path:

@@ -17,6 +17,7 @@ from scene.dataset_readers import sceneLoadTypeCallbacks
 from scene.gaussian_model import GaussianModel
 from arguments import ModelParams
 from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
+from scene.implicit_voxel import ImplicitVoxel
 
 class Scene:
 
@@ -49,7 +50,7 @@ class Scene:
         else:
             assert False, "Could not recognize scene type!"
 
-        self.gaussians.set_appearance(len(scene_info.train_cameras))
+        self.gaussians.set_appearance(len(scene_info.train_cameras)) ### temporarily leave this alone, dive into it once we have decent results
         
         if not self.loaded_iter:
             if ply_path is not None:
@@ -72,7 +73,20 @@ class Scene:
         if shuffle:
             random.shuffle(scene_info.train_cameras)  # Multi-res consistent random shuffling
             random.shuffle(scene_info.test_cameras)  # Multi-res consistent random shuffling
+        
 
+
+        ###################################################################
+        ## Implicit Voxel Initialization from here [LSS + DepthAnything] ##
+        ###################################################################
+        self.init_voxel = ImplicitVoxel().cuda()
+        print(self.init_voxel.encoder())
+
+
+
+        ###################################################################
+        ### Gausian Initialization from here [by using points from SfM] ###
+        ###################################################################
         self.cameras_extent = scene_info.nerf_normalization["radius"]
 
         # print(f'self.cameras_extent: {self.cameras_extent}')
