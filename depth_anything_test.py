@@ -20,3 +20,4 @@ model = model.to(DEVICE).eval()
 
 raw_img = cv2.imread('/data/zhangao/tandt_db/tandt/truck/images/000001.jpg')
 depth = model.infer_image(raw_img) # HxW raw depth map in numpy
+print(depth.shape)
