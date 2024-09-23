@@ -1,11 +1,11 @@
-name: scaffold_gs
+name: implicit
 channels:
   - pytorch
   - pyg
   - conda-forge
   - defaults
 dependencies:
-  - cudatoolkit=11.6
+  - cudatoolkit=11.8
   - plyfile=0.8.1
   - python=3.9
   - pip=22.3.1
@@ -13,6 +13,7 @@ dependencies:
   - torchaudio=0.12.1
   - torchvision=0.13.1
   - pytorch-scatter
+  - opencv
   - tqdm
   - pip:
     - einops
@@ -21,3 +22,7 @@ dependencies:
     - laspy
     - submodules/diff-gaussian-rasterization
     - submodules/simple-knn
+    - gradio_imageslider
+    - gradio
+    - matplotlib
+

@@ -12,6 +12,7 @@
 import os
 import random
 import json
+import numpy as np
 from utils.system_utils import searchForMaxIteration
 from scene.dataset_readers import sceneLoadTypeCallbacks
 from scene.gaussian_model import GaussianModel
@@ -79,8 +80,9 @@ class Scene:
         ###################################################################
         ## Implicit Voxel Initialization from here [LSS + DepthAnything] ##
         ###################################################################
-        self.init_voxel = ImplicitVoxel().cuda()
-        print(self.init_voxel.encoder())
+        self.implicit_voxel = ImplicitVoxel().cuda()
+        depth = self.implicit_voxel(scene_info.train_cameras)
+        print("[DEBUGGING]: ", depth.shape)
 
 
 
