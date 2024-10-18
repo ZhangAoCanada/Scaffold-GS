@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=3 python train.py --eval -s data/tandt_db/tandt/truck --lod 0 --gpu -1 --voxel_size 0.01 --update_init_factor 16 --appearance_dim 0 --ratio 1 --iterations 30_000 --port 18888 -m outputs/tandt_db/tandt/truck/baseline/trying_origin_mvs

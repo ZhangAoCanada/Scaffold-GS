@@ -18,6 +18,8 @@ from scene.gaussian_model import GaussianModel
 from arguments import ModelParams
 from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
 
+from scene.implicit_init.implicit_init import ImplicitInit
+
 class Scene:
 
     gaussians : GaussianModel
@@ -29,6 +31,10 @@ class Scene:
         self.model_path = args.model_path
         self.loaded_iter = None
         self.gaussians = gaussians
+
+        ##################### DEBUG #####################
+        self.implicit_init = ImplicitInit()
+        #################################################
 
         if load_iteration:
             if load_iteration == -1:
@@ -77,6 +83,19 @@ class Scene:
 
         # print(f'self.cameras_extent: {self.cameras_extent}')
 
+        ###################### DEBUG ######################
+        import numpy as np
+        if os.path.exists("outputs/colors.npy") and os.path.exists("outputs/features.npy") and os.path.exists("outputs/points.npy"):
+            colors = np.load("outputs/colors.npy")
+            features = np.load("outputs/features.npy")
+            points = np.load("outputs/points.npy")
+        else:
+            colors, features, points = self.implicit_init(scene_info.train_cameras, args.source_path)
+            self.implicit_init.del_all()
+            print(f'[INFO] colors: {colors.shape}, features: {features.shape}, points: {points.shape}')
+            print(f'[INFO] colors, features, points saved as np.array')
+        ###################################################
+
         for resolution_scale in resolution_scales:
             print("Loading Training Cameras")
             self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args)
@@ -93,6 +112,8 @@ class Scene:
                                                            "iteration_" + str(self.loaded_iter)))
         else:
             self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
+            # self.gaussians.create_from_implicitvoxel(colors, features, points, self.cameras_extent)
+            # self.gaussians.create_from_ply("data/tandt_db/tandt/truck_colmap/dense/fused.ply", self.cameras_extent)
 
     def save(self, iteration):
         point_cloud_path = os.path.join(self.model_path, "point_cloud/iteration_{}".format(iteration))

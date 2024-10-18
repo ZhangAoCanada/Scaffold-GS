@@ -229,12 +229,114 @@ class GaussianModel:
     def voxelize_sample(self, data=None, voxel_size=0.01):
         np.random.shuffle(data)
         data = np.unique(np.round(data/voxel_size), axis=0)*voxel_size
-        
         return data
+    
+    def voxelize_implicit(self, colors, features, points, voxel_size=0.01):
+        # shuffle colors, features, points with the same indices
+        indices = np.arange(len(points))
+        np.random.shuffle(indices)
+        colors = colors[indices]
+        features = features[indices]
+        points = points[indices]
+        # unique colors, features, points with the same indices
+        points_uniq, uniq_indices = np.unique(np.round(points/voxel_size), axis=0, return_index=True)
+        points_uniq = points_uniq*voxel_size
+        features_uniq = features[uniq_indices]
+        colors_uniq = colors[uniq_indices]
+        return colors_uniq, features_uniq, points_uniq
+
+    def create_from_implicitvoxel(self, colors, features, points, spatial_lr_scale):
+        self.spatial_lr_scale = spatial_lr_scale
+        # Q: What is the purpose of this line?
+        points = points[::self.ratio]
+
+        if self.voxel_size <= 0:
+            init_points = torch.tensor(points).float().cuda()
+            init_dist = distCUDA2(init_points).float().cuda()
+            median_dist, _ = torch.kthvalue(init_dist, int(init_dist.shape[0]*0.5))
+            self.voxel_size = median_dist.item()
+            del init_dist
+            del init_points
+            torch.cuda.empty_cache()
+
+        print(f'Initial voxel_size: {self.voxel_size}')
+
+        colors, features, points = self.voxelize_implicit(colors, features, points, voxel_size=self.voxel_size)
+        fused_point_cloud = torch.tensor(np.asarray(points)).float().cuda()
+        offsets = torch.zeros((fused_point_cloud.shape[0], self.n_offsets, 3)).float().cuda()
+        # assert features.shape[1] == self.feat_dim
+        # anchors_feat = torch.tensor(np.asarray(features)).float().cuda()
+        anchors_feat = torch.zeros((fused_point_cloud.shape[0], self.feat_dim)).float().cuda()
+
+        print("Number of points at initialisation : ", fused_point_cloud.shape[0])
+        dist2 = torch.clamp_min(distCUDA2(fused_point_cloud).float().cuda(), 0.0000001)
+        scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 6)
+
+        rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
+        rots[:, 0] = 1
+
+        opacities = inverse_sigmoid(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
+
+        self._anchor = nn.Parameter(fused_point_cloud.requires_grad_(True))
+        self._offset = nn.Parameter(offsets.requires_grad_(True))
+        self._anchor_feat = nn.Parameter(anchors_feat.requires_grad_(True))
+        self._scaling = nn.Parameter(scales.requires_grad_(True))
+        self._rotation = nn.Parameter(rots.requires_grad_(False))
+        self._opacity = nn.Parameter(opacities.requires_grad_(False))
+        self.max_radii2D = torch.zeros((self.get_anchor.shape[0]), device="cuda")
 
     def create_from_pcd(self, pcd : BasicPointCloud, spatial_lr_scale : float):
         self.spatial_lr_scale = spatial_lr_scale
         points = pcd.points[::self.ratio]
+
+        # # uniform sampling
+        # points = np.random.uniform(low=-1., high=1., size=(points.shape[0]*5, 3))
+        # points = np.random.uniform(low=-1., high=1., size=(1000000, 3))
+
+        if self.voxel_size <= 0:
+            init_points = torch.tensor(points).float().cuda()
+            init_dist = distCUDA2(init_points).float().cuda()
+            median_dist, _ = torch.kthvalue(init_dist, int(init_dist.shape[0]*0.5))
+            self.voxel_size = median_dist.item()
+            del init_dist
+            del init_points
+            torch.cuda.empty_cache()
+
+        print(f'Initial voxel_size: {self.voxel_size}')
+        
+        
+        points = self.voxelize_sample(points, voxel_size=self.voxel_size)
+        fused_point_cloud = torch.tensor(np.asarray(points)).float().cuda()
+        offsets = torch.zeros((fused_point_cloud.shape[0], self.n_offsets, 3)).float().cuda()
+        anchors_feat = torch.zeros((fused_point_cloud.shape[0], self.feat_dim)).float().cuda()
+        
+        print("Number of points at initialisation : ", fused_point_cloud.shape[0])
+
+        dist2 = torch.clamp_min(distCUDA2(fused_point_cloud).float().cuda(), 0.0000001)
+        scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 6)
+        
+        rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
+        rots[:, 0] = 1
+
+        opacities = inverse_sigmoid(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
+
+        self._anchor = nn.Parameter(fused_point_cloud.requires_grad_(True))
+        self._offset = nn.Parameter(offsets.requires_grad_(True))
+        self._anchor_feat = nn.Parameter(anchors_feat.requires_grad_(True))
+        self._scaling = nn.Parameter(scales.requires_grad_(True))
+        self._rotation = nn.Parameter(rots.requires_grad_(False))
+        self._opacity = nn.Parameter(opacities.requires_grad_(False))
+        self.max_radii2D = torch.zeros((self.get_anchor.shape[0]), device="cuda")
+
+
+
+    def create_from_ply(self, ply_pth : str, spatial_lr_scale : float):
+        self.spatial_lr_scale = spatial_lr_scale
+        ply_data = PlyData.read(ply_pth)
+        points = np.stack((np.asarray(ply_data.elements[0]["x"]),
+                        np.asarray(ply_data.elements[0]["y"]),
+                        np.asarray(ply_data.elements[0]["z"])), axis=1).astype(np.float32)
+        # points = pcd.points[::self.ratio]
 
         if self.voxel_size <= 0:
             init_points = torch.tensor(points).float().cuda()
@@ -507,6 +609,11 @@ class GaussianModel:
 
     # statis grad information to guide liftting. 
     def training_statis(self, viewspace_point_tensor, opacity, update_filter, offset_selection_mask, anchor_visible_mask):
+        """
+        update_filter: visibility_filter, gaussian radii > 0
+        offset_selection_mask: opacity (tanh) > 0
+        anchor_visible_mask: prefilter_voxel, voxels that in frustum
+        """
         # update opacity stats
         temp_opacity = opacity.clone().view(-1).detach()
         temp_opacity[temp_opacity<0] = 0

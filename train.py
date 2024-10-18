@@ -15,7 +15,8 @@ import numpy as np
 import subprocess
 cmd = 'nvidia-smi -q -d Memory |grep -A4 GPU|grep Used'
 result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE).stdout.decode().split('\n')
-os.environ['CUDA_VISIBLE_DEVICES']=str(np.argmin([int(x.split()[2]) for x in result[:-1]]))
+# os.environ['CUDA_VISIBLE_DEVICES']=str(np.argmin([int(x.split()[2]) for x in result[:-1]]))
+# os.environ['CUDA_VISIBLE_DEVICES'] = "1"
 
 os.system('echo $CUDA_VISIBLE_DEVICES')
 
@@ -464,9 +465,9 @@ if __name__ == "__main__":
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
     parser.add_argument('--warmup', action='store_true', default=False)
     parser.add_argument('--use_wandb', action='store_true', default=False)
-    # parser.add_argument("--test_iterations", nargs="+", type=int, default=[3_000, 7_000, 30_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[1000*i for i in range(1, 31)])
     # parser.add_argument("--save_iterations", nargs="+", type=int, default=[3_000, 7_000, 30_000])
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[30_000])
+    # parser.add_argument("--test_iterations", nargs="+", type=int, default=[30_000])
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[30_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
